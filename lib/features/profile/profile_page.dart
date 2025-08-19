@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/firestore_refs.dart';
+import '../../core/utils/slug.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -31,19 +32,6 @@ class _ProfilePageState extends State<ProfilePage> {
     return usersCol().doc(uid).get();
   }
 
-  String _slug(String input) {
-    final lower = input.trim().toLowerCase();
-    final replaced = lower
-        .replaceAll(RegExp(r"[áàâãä]"), "a")
-        .replaceAll(RegExp(r"[éèêë]"), "e")
-        .replaceAll(RegExp(r"[íìîï]"), "i")
-        .replaceAll(RegExp(r"[óòôõö]"), "o")
-        .replaceAll(RegExp(r"[úùûü]"), "u")
-        .replaceAll(RegExp(r"[ç]"), "c")
-        .replaceAll(RegExp(r"[^a-z0-9]+"), "-")
-        .replaceAll(RegExp(r"-+"), "-");
-    return replaced.startsWith("-") ? replaced.substring(1) : replaced;
-  }
 
   Future<void> _saveProfile() async {
     try {
@@ -65,9 +53,9 @@ class _ProfilePageState extends State<ProfilePage> {
         if (countryName.isNotEmpty) 'countryName': countryName,
         if (stateName.isNotEmpty) 'stateName': stateName,
         if (cityName.isNotEmpty) 'cityName': cityName,
-        if (countryName.isNotEmpty) 'countryKey': _slug(countryName),
-        if (stateName.isNotEmpty) 'stateKey': _slug(stateName),
-        if (cityName.isNotEmpty) 'cityKey': _slug(cityName),
+        if (countryName.isNotEmpty) 'countryKey': slugify(countryName),
+        if (stateName.isNotEmpty) 'stateKey': slugify(stateName),
+        if (cityName.isNotEmpty) 'cityKey': slugify(cityName),
       };
 
       await usersCol().doc(uid).set(updates, SetOptions(merge: true));
