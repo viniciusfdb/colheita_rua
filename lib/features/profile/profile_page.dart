@@ -3,7 +3,24 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/firestore_refs.dart';
-import '../../core/utils/slug.dart';
+
+// [ADDED 2025-08-19] slugify util local para chaves (sem dependências externas)
+String slugify(String input) {
+  if (input.isEmpty) return '';
+  var s = input.trim().toLowerCase();
+  // Normaliza acentos comuns em pt-BR
+  const from = 'áàâãäåéèêëíìîïóòôõöúùûüñç';
+  const to   = 'aaaaaaeeeeiiiiooooouuuunc';
+  for (var i = 0; i < from.length; i++) {
+    s = s.replaceAll(from[i], to[i]);
+  }
+  // Troca qualquer sequência não alfanumérica por '-'
+  s = s.replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+  // Remove hífens duplicados e dos extremos
+  s = s.replaceAll(RegExp(r'-{2,}'), '-');
+  s = s.replaceAll(RegExp(r'^-+'), '').replaceAll(RegExp(r'-+\$'), '');
+  return s;
+}
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
