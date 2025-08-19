@@ -1,0 +1,56 @@
+name: colheita_novo
+description: "A new Flutter project."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  http: ^1.1.0
+
+  # Mapa e coordenadas
+  flutter_map: ^8.2.1
+  latlong2: ^0.9.1
+
+  # Firebase (deixe o FlutterFire ajustar se necessário)
+  firebase_core: ^4.0.0
+  firebase_auth: ^6.0.1
+  cloud_firestore: ^6.0.0
+
+  # Localização e geohash
+  geolocator: ^13.0.1
+  dart_geohash: ^2.1.0
+
+  # Armazenamento local simples
+  shared_preferences: ^2.5.3
+
+  # (Opcional para depois)
+  # flutter_background: ^1.2.0
+
+  # (Opcional)
+  # intl: ^0.19.0
+
+  flutter_launcher_icons: ^0.13.1
+  sqflite: ^2.4.2
+  country_state_city_picker: ^1.2.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter_icons:
+  android: true
+  ios: true
+  # image_path: "assets/icon/app_icon.png"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/home.jpg
+    - assets/summary.jpg
+    - assets/history.jpg
