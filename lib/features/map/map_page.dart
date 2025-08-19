@@ -8,6 +8,8 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math';
 import 'dart:ui' show ImageFilter;
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:colheita_novo/core/run_local_repository.dart';
 import '../run/run_summary_page.dart';
 
 class MapPage extends StatefulWidget {
@@ -29,12 +31,14 @@ class _MapPageState extends State<MapPage> {
   final List<LatLng> _track = [];
   double _distanceMeters = 0;
   Stopwatch _stopwatch = Stopwatch();
+  int _recoveredElapsedMs = 0;
   Timer? _ticker;
   bool _running = false;
 
   // Dados da corrida (para resumo)
   DateTime? _runStartAt;
   String? _currentRunId;
+  int? _localRunId;
   final List<String> _plantedIds = [];
   final List<LatLng> _plantedPoints = [];
   final List<Map<String, dynamic>> _plantedWithType = [];
@@ -138,6 +142,7 @@ class _MapPageState extends State<MapPage> {
     _listenUserInventory();
     _getLocation();
     _loadSeedTypes();
+    _recoverUnfinishedRun();
   }
 
   Future<void> _getLocation() async {
@@ -172,6 +177,43 @@ class _MapPageState extends State<MapPage> {
     } catch (_) {
       // manter vazio se falhar; usaremos defaults
     }
+  }
+
+  Future<void> _recoverUnfinishedRun() async {
+    final session = await RunLocalRepository.instance.getUnfinishedRun();
+    if (session == null) return;
+    _running = true;
+    _localRunId = session.id;
+    _track.clear();
+    _track.addAll(session.points);
+    _runStartAt = session.startedAt;
+    _distanceMeters = 0;
+    for (var i = 1; i < _track.length; i++) {
+      _distanceMeters += _distBetween(_track[i - 1], _track[i]);
+    }
+    _recoveredElapsedMs = DateTime.now().difference(_runStartAt!).inMilliseconds;
+    _stopwatch = Stopwatch()..start();
+    _ticker?.cancel();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
+    await FlutterForegroundTask.startService(
+      notificationTitle: 'Colheita na Rua',
+      notificationText: 'Rastreando sua corrida…',
+    );
+    final locationSettings = Platform.isAndroid
+        ? const AndroidSettings(
+            accuracy: LocationAccuracy.bestForNavigation,
+            distanceFilter: 5,
+          )
+        : const AppleSettings(
+            accuracy: LocationAccuracy.bestForNavigation,
+            distanceFilter: 5,
+            pauseLocationUpdatesAutomatically: false,
+            allowBackgroundLocationUpdates: true,
+            showBackgroundLocationIndicator: true,
+          );
+    _posSub = Geolocator.getPositionStream(locationSettings: locationSettings)
+        .listen(_onLocationUpdate);
+    setState(() {});
   }
 
   void _listenPlantsAround() {
@@ -899,7 +941,10 @@ class _MapPageState extends State<MapPage> {
     _stealPointsRun.clear();
     _harvestPointsRun.clear();
     _totalPointsRun = 0;
-    _runStartAt = DateTime.now();
+    final now = DateTime.now();
+    _runStartAt = now;
+    _localRunId = await RunLocalRepository.instance.startRun(now);
+    _recoveredElapsedMs = 0;
     _wateredCountRun = 0;
     _stolenCountRun = 0;
     _harvestedCountRun = 0;
@@ -919,6 +964,11 @@ class _MapPageState extends State<MapPage> {
     _stopwatch.start();
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
+
+    await FlutterForegroundTask.startService(
+      notificationTitle: 'Colheita na Rua',
+      notificationText: 'Rastreando sua corrida…',
+    );
 
     // Configurações de localização com suporte a background (Android: foreground service; iOS: background updates)
     final locationSettings = Platform.isAndroid
@@ -957,14 +1007,27 @@ class _MapPageState extends State<MapPage> {
     if (_simulating) {
       _stopSimulation();
     }
+    await FlutterForegroundTask.stopService();
 
     // Persistir corrida em `runs` e ir para o resumo
     final user = FirebaseAuth.instance.currentUser;
     final endedAt = DateTime.now();
     final startedAt = _runStartAt ?? endedAt.subtract(Duration(milliseconds: _stopwatch.elapsedMilliseconds));
-    final durationMs = _stopwatch.elapsedMilliseconds;
-
-    final List<Map<String, dynamic>> path = _track
+    final durationMs = _recoveredElapsedMs + _stopwatch.elapsedMilliseconds;
+    List<LatLng> pathPoints = List<LatLng>.from(_track);
+    if (_localRunId != null) {
+      final pts = await RunLocalRepository.instance.getPointsForRun(_localRunId!);
+      if (pts.isNotEmpty) {
+        pathPoints = pts;
+        _distanceMeters = 0;
+        for (var i = 1; i < pts.length; i++) {
+          _distanceMeters += _distBetween(pts[i - 1], pts[i]);
+        }
+      }
+      await RunLocalRepository.instance.deleteRun(_localRunId!);
+      _localRunId = null;
+    }
+    final List<Map<String, dynamic>> path = pathPoints
         .map((e) => {'lat': e.latitude, 'lng': e.longitude})
         .toList(growable: false);
 
@@ -1050,6 +1113,7 @@ class _MapPageState extends State<MapPage> {
     );
 
     _currentRunId = null; // [MOD] libera o runId após finalizar
+    _recoveredElapsedMs = 0;
 
     setState(() {});
   }
@@ -1063,6 +1127,9 @@ class _MapPageState extends State<MapPage> {
       _distSinceLastPlant += d;
     }
     _track.add(p);
+    if (_localRunId != null) {
+      await RunLocalRepository.instance.insertPoint(_localRunId!, p, DateTime.now());
+    }
     _lastCenter = p;
     _currentPosition = p;
     if (_mapReady) {
